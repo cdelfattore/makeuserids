@@ -1,15 +1,30 @@
 #!/bin/bash
 
 # Chris Del Fattore
+# Jordan DiGiovanni
+# Brian Castellaneta
 
+
+if [ $# -eq 0 ]
+then
+echo "Usage"
+echo "Enter a file name to make userids"
+echo "Makeuserids can make userids from a list of names from a file"
+echo "Name format must be in Last Name, First Name ex. Abady, Irene"
+else
 inputfile=$1
 
+
+# 0. remove ids.final from previous run of script
+rm ids.final
+
 # 1. Create firstn from $inputfile
+echo "1. Extracting 1st letter of first name > firstn ..."
 cut -d, -f2 p4names.txt | cut -b2  | tr [A-Z] [a-z] > firstn
 
 
 # 2. Create lastn from $inputfile with all special characters removed
-
+echo "2. Removing Special characters and extracting up to 7 letters of last name from $inputfile > lastn"
 cut -d, -f1  p4names.txt | tr "[A-Z]" "[a-z]" | tr -d " " | sed 's/-//g' | sed "s/'//g" | cut -c-7 > lastn
 
 # or use tr -d [:punct:] to delete puncuation
@@ -17,14 +32,14 @@ cut -d, -f1  p4names.txt | tr "[A-Z]" "[a-z]" | tr -d " " | sed 's/-//g' | sed "
 # 3. Create first draft userids file from firstn and lastn > ids.1st'.
 #    It contains userids in this format:
 
+echo "3. Creating first draft userids file > ids.1st"
 paste firstn lastn | sed 's/\t//g' > ids.1st
 
 # 4. Create list of the duplicated ids in ids.1st > duplids'.
 #    We'll use duplids as a lookup table.  A portion of duplids is
 #    shown below:
 
-#uniq -d > duplids ids.1st
-
+echo "4. Create list of the duplicated ids in ids.1st > duplids"
 sort ids.1st | uniq -d > duplids;
 
 # 5. Append userids from ids.1st to ids.2nd.
@@ -55,36 +70,75 @@ sort ids.1st | uniq -d > duplids;
 
 #sort ids.1st > ids.1st
 
+echo "5. Find and appending numbers to duplicated in ids.1st > ids.2nd"
+a=0
+
 for userid in `cat ids.1st`
 do
 
-	grep -q $userid duplids 
+# this prints dots
+if [ $a -gt 200 ]
+then
+echo "." | tr -d "\n"
+a=0
+else
+a=$[$a+1]
+fi
+
+
+	grep -w -q $userid duplids 
 	if [ $? -eq 0 ]
 	then
 
 		if [[ $userid == $newid ]]
                 then
                 num=$[$num+1]
-                else
-                num=1
+		else
+		num=1
                 fi
 
 		lc=`echo $userid | tr -d "\n" | wc -m`
 
-		if [ $lc -ge 7 -a $num -le 9 ]
+		if [ $lc -eq 8 -a $num -le 9 ]
 		then
 		newid=`echo $userid`
 		pid=`echo $userid | cut -c-7`
-		echo $pid$num >> ids.2nd
 		fi
 
-		if [ $lc -ge 7 -a $num -ge 10 ]
+		if [ $lc -eq 8 -a $num -ge 10 ]
 		then
 		newid=`echo $userid`
 		pid=`echo $userid | cut -c-6`
-                echo $pid$num >> ids.2nd
 		fi
 
+		if [ $lc -le 7 -a $num -le 9 ]
+                then
+                newid=`echo $userid`
+                pid=`echo $userid | cut -c-7`
+		fi
+
+                if [ $lc -le 7 -a $num -ge 10 ]
+                then
+                newid=`echo $userid`
+                pid=`echo $userid | cut -c-6`
+                fi
+
+	grep -w -q $pid$num ids.2nd
+	if [ $? -eq 0 ]
+	then
+#	grep -w -q $pid$num ids.2nd
+	while [ $? -eq 0 ]
+	do
+	num=$[$num+1]
+        grep -w -q $pid$num ids.2nd
+	done
+
+#	num=$[$num-1]
+	this=`echo $pid$num`
+	echo $this >> ids.2nd
+	else
+	echo $pid$num >> ids.2nd
+	fi
 
 	else
 		echo $userid >> ids.2nd
@@ -97,14 +151,24 @@ done
 #    The same uniq option used to create duplids (step 4) should
 #    work.
 
-#uniq -D > duplids2
 
+uniq -d ids.2nd > duplids2
 
+echo
+echo "6. double check ids.2nd for any userid duplications"
+wc=`wc -l duplids2 | awk '{ print $1 }'`
 
+if [ $wc -ne 0 ]
+then
+echo "User duplication found"
 
+else
+echo "No duplication found"
 # 7. Paste ids.2nd to $inputfile > ids.final
-
-#paste ids.2nd $inputfile > ids.final
+echo "7. Pasting ids.2nd to $inputfile > ids.final "
+paste $inputfile  ids.2nd  | sed 's/\t/ :/g' > ids.final
 
 #remove any temp files
-rm firstn lastn
+rm firstn lastn ids.1st duplids ids.2nd duplids2
+fi
+fi
